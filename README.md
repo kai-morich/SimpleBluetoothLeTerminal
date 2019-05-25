@@ -10,7 +10,8 @@ so each vendor uses GATT services with different service and characteristic UUID
 
 This app includes UUIDs for widely used serial profiles:
 - Nordic Semiconductor nRF51822  
-- Texas Instruments CC254x  
+- Texas Instruments CC254x
+- Microchip RN4870/1
 
 
 ## Motivation

@@ -32,6 +32,8 @@ class SerialSocket extends BluetoothGattCallback {
     private static final UUID BLUETOOTH_LE_NRF_SERVICE    = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
     private static final UUID BLUETOOTH_LE_NRF_CHAR_RW2   = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e"); // read on microbit, write on adafruit
     private static final UUID BLUETOOTH_LE_NRF_CHAR_RW3   = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
+    private static final UUID BLUETOOTH_LE_RN4870_SERVICE = UUID.fromString("49535343-FE7D-4AE5-8FA9-9FAFD205E455");
+    private static final UUID BLUETOOTH_LE_RN4870_CHAR_RW = UUID.fromString("49535343-1E4D-4BD9-BA61-23C647249616");
 
     private static final String TAG = "SerialSocket";
 
@@ -182,6 +184,13 @@ class SerialSocket extends BluetoothGattCallback {
                 //    Log.d(TAG, "characteristic "+characteristic.getUuid());
                 readCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_CC254X_CHAR_RW);
                 writeCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_CC254X_CHAR_RW);
+            }
+            if (gattService.getUuid().equals(BLUETOOTH_LE_RN4870_SERVICE)) {
+                Log.d(TAG, "service rn4870 uart");
+                //for(BluetoothGattCharacteristic characteristic : gattService.getCharacteristics())
+                //    Log.d(TAG, "characteristic "+characteristic.getUuid());
+                readCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_RN4870_CHAR_RW);
+                writeCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_RN4870_CHAR_RW);
             }
             if (gattService.getUuid().equals(BLUETOOTH_LE_NRF_SERVICE)) {
                 Log.d(TAG, "service nrf uart");

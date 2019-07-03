@@ -35,6 +35,8 @@ class SerialSocket extends BluetoothGattCallback {
     private static final UUID BLUETOOTH_LE_RN4870_SERVICE = UUID.fromString("49535343-FE7D-4AE5-8FA9-9FAFD205E455");
     private static final UUID BLUETOOTH_LE_RN4870_CHAR_RW = UUID.fromString("49535343-1E4D-4BD9-BA61-23C647249616");
 
+    private static final int MAX_MTU = 512; // BLE standard does not limit, some BLE 4.2 devices support 251, various source say that Android has max 512
+    private static final int DEFAULT_MTU = 23;
     private static final String TAG = "SerialSocket";
 
     private final ArrayList<byte[]> writeBuffer;
@@ -51,6 +53,7 @@ class SerialSocket extends BluetoothGattCallback {
     private boolean writePending;
     private boolean canceled;
     private boolean connected;
+    private int payloadSize = DEFAULT_MTU-3;
 
     SerialSocket() {
         writeBuffer = new ArrayList<>();
@@ -176,6 +179,10 @@ class SerialSocket extends BluetoothGattCallback {
         Log.d(TAG, "servicesDiscovered, status " + status);
         if (canceled)
             return;
+        connectCharacteristics1(gatt);
+    }
+
+    private void connectCharacteristics1(BluetoothGatt gatt) {
         writePending = false;
         for (BluetoothGattService gattService : gatt.getServices()) {
             if (gattService.getUuid().equals(BLUETOOTH_LE_CC254X_SERVICE)) {
@@ -220,6 +227,28 @@ class SerialSocket extends BluetoothGattCallback {
                 }
             }
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            Log.d(TAG, "request max MTU");
+            if (!gatt.requestMtu(MAX_MTU))
+                onSerialConnectError(new IOException("request MTU failed"));
+            // continues asynchronously in onMtuChanged
+        } else {
+            connectCharacteristics2(gatt);
+        }
+    }
+
+    @Override
+    public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
+        Log.d(TAG,"mtu size "+mtu+", status="+status);
+        super.onMtuChanged(gatt, mtu, status);
+        if(status ==  BluetoothGatt.GATT_SUCCESS) {
+            payloadSize = mtu - 3;
+            Log.d(TAG, "payload size "+payloadSize);
+        }
+        connectCharacteristics2(gatt);
+    }
+
+    private void connectCharacteristics2(BluetoothGatt gatt) {
         if(readCharacteristic==null || writeCharacteristic==null) {
             for (BluetoothGattService gattService : gatt.getServices()) {
                 Log.d(TAG, "service "+gattService.getUuid());
@@ -257,7 +286,6 @@ class SerialSocket extends BluetoothGattCallback {
         if(!gatt.writeDescriptor(readDescriptor)) {
             onSerialConnectError(new IOException("read characteristic CCCD descriptor not writable"));
         }
-        Log.d(TAG, "writing read characteristic descriptor");
         // continues asynchronously in onDescriptorWrite()
     }
 
@@ -268,6 +296,8 @@ class SerialSocket extends BluetoothGattCallback {
             if (status != BluetoothGatt.GATT_SUCCESS) {
                 onSerialConnectError(new IOException("write descriptor failed"));
             } else {
+                // onCharacteristicChanged with incoming data can happen after writeDescriptor(ENABLE_INDICATION/NOTIFICATION)
+                // before confirmed by this method, so receive data can be shown before device is shown as 'Connected'.
                 onSerialConnect();
                 connected = true;
                 Log.d(TAG, "connected");
@@ -299,10 +329,10 @@ class SerialSocket extends BluetoothGattCallback {
             throw new IOException("not connected");
         byte[] data0;
         synchronized (writeBuffer) {
-            if(data.length<=20) {
+            if(data.length <= payloadSize) {
                 data0 = data;
             } else {
-                data0 = Arrays.copyOfRange(data, 0, 20);
+                data0 = Arrays.copyOfRange(data, 0, payloadSize);
             }
             if(!writePending && writeBuffer.isEmpty()) {
                 writePending = true;
@@ -311,10 +341,10 @@ class SerialSocket extends BluetoothGattCallback {
                 Log.d(TAG,"write queued, len="+data0.length);
                 data0 = null;
             }
-            if(data.length>20) {
-                for(int i=1; i<(data.length+19)/20; i++) {
-                    int from = i*20;
-                    int to = Math.min(from+20, data.length);
+            if(data.length > payloadSize) {
+                for(int i=1; i<(data.length+payloadSize-1)/payloadSize; i++) {
+                    int from = i*payloadSize;
+                    int to = Math.min(from+payloadSize, data.length);
                     writeBuffer.add(Arrays.copyOfRange(data, from, to));
                     Log.d(TAG,"write queued, len="+(to-from));
                 }

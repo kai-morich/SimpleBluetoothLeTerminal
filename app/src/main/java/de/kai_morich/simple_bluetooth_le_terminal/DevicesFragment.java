@@ -145,16 +145,15 @@ public class DevicesFragment extends ListFragment {
     }
 
     private void startScan() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (getActivity().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-                builder.setTitle(getText(R.string.location_permission_title));
-                builder.setMessage(getText(R.string.location_permission_message));
-                builder.setPositiveButton(android.R.string.ok,
-                        (dialog, which) -> requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 0));
-                builder.show();
-                return;
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                getActivity().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+            builder.setTitle(getText(R.string.location_permission_title));
+            builder.setMessage(getText(R.string.location_permission_message));
+            builder.setPositiveButton(android.R.string.ok,
+                    (dialog, which) -> requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 0));
+            builder.show();
+            return;
         }
         listItems.clear();
         listAdapter.notifyDataSetChanged();
@@ -166,7 +165,7 @@ public class DevicesFragment extends ListFragment {
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         // ignore requestCode as there is only one in this fragment
         if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             new Handler(Looper.getMainLooper()).postDelayed(this::startScan,1); // run after onResume to avoid wrong empty-text

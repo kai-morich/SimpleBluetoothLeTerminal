@@ -314,7 +314,7 @@ class SerialSocket extends BluetoothGattCallback {
     public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
         if(canceled)
             return;
-        if(characteristic == readCharacteristic) {
+        if(characteristic == readCharacteristic) { // NOPMD - test object identity
             byte[] data = readCharacteristic.getValue();
             onSerialRead(data);
             Log.d(TAG,"read, len="+data.length);
@@ -369,7 +369,7 @@ class SerialSocket extends BluetoothGattCallback {
             onSerialIoError(new IOException("write failed"));
             return;
         }
-        if(characteristic == writeCharacteristic) {
+        if(characteristic == writeCharacteristic) { // NOPMD - test object identity
             Log.d(TAG,"write finished, status="+status);
             writeNext();
         }

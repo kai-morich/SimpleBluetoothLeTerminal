@@ -34,16 +34,15 @@ import java.util.Collections;
 public class DevicesFragment extends ListFragment {
 
     private Menu menu;
-    private final BluetoothAdapter bluetoothAdapter;
+    private BluetoothAdapter bluetoothAdapter;
     private BroadcastReceiver bleDiscoveryBroadcastReceiver;
     private IntentFilter bleDiscoveryIntentFilter;
 
     private ArrayList<BluetoothDevice> listItems = new ArrayList<>();
     private ArrayAdapter<BluetoothDevice> listAdapter;
+    private boolean scanning;
 
     public DevicesFragment() {
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-
         bleDiscoveryBroadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -67,6 +66,8 @@ public class DevicesFragment extends ListFragment {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
+        if(getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
+            bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         listAdapter = new ArrayAdapter<BluetoothDevice>(getActivity(), 0, listItems) {
             @Override
             public View getView(int position, View view, ViewGroup parent) {
@@ -100,22 +101,32 @@ public class DevicesFragment extends ListFragment {
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         inflater.inflate(R.menu.menu_devices, menu);
         this.menu = menu;
-        if(!getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
+        if (bluetoothAdapter == null) {
             menu.findItem(R.id.bt_settings).setEnabled(false);
-        if(bluetoothAdapter==null || !getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE))
             menu.findItem(R.id.ble_scan).setEnabled(false);
+        } else if(!bluetoothAdapter.isEnabled()) {
+            menu.findItem(R.id.ble_scan).setEnabled(false);
+        }
     }
 
     @Override
     public void onResume() {
         super.onResume();
         getActivity().registerReceiver(bleDiscoveryBroadcastReceiver, bleDiscoveryIntentFilter);
-        if(bluetoothAdapter == null || !getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH_LE))
+        if(bluetoothAdapter == null) {
             setEmptyText("<bluetooth LE not supported>");
-        else if(!bluetoothAdapter.isEnabled())
+        } else if(!bluetoothAdapter.isEnabled()) {
             setEmptyText("<bluetooth is disabled>");
-        else
+            if (menu != null) {
+                listItems.clear();
+                listAdapter.notifyDataSetChanged();
+                menu.findItem(R.id.ble_scan).setEnabled(false);
+            }
+        } else {
             setEmptyText("<use SCAN to refresh devices>");
+            if (menu != null)
+                menu.findItem(R.id.ble_scan).setEnabled(true);
+        }
     }
 
     @Override
@@ -123,6 +134,12 @@ public class DevicesFragment extends ListFragment {
         super.onPause();
         stopScan();
         getActivity().unregisterReceiver(bleDiscoveryBroadcastReceiver);
+    }
+
+    @Override
+    public void onDestroyView() {
+        super.onDestroyView();
+        menu = null;
     }
 
     @Override
@@ -161,6 +178,7 @@ public class DevicesFragment extends ListFragment {
         menu.findItem(R.id.ble_scan).setVisible(false);
         menu.findItem(R.id.ble_scan_stop).setVisible(true);
         bluetoothAdapter.startDiscovery();
+        scanning = true;
         //  BluetoothLeScanner.startScan(...) would return more details, but that's not needed here
     }
 
@@ -187,6 +205,9 @@ public class DevicesFragment extends ListFragment {
     }
 
     private void stopScan() {
+        if(!scanning)
+            return;
+        scanning = false;
         setEmptyText("<no bluetooth devices found>");
         if(menu != null) {
             menu.findItem(R.id.ble_scan).setVisible(true);

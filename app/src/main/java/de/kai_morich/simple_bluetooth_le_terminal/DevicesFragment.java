@@ -1,6 +1,7 @@
 package de.kai_morich.simple_bluetooth_le_terminal;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -9,6 +10,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.location.LocationManager;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -33,33 +36,43 @@ import java.util.Collections;
  */
 public class DevicesFragment extends ListFragment {
 
-    private Menu menu;
-    private BluetoothAdapter bluetoothAdapter;
-    private BroadcastReceiver bleDiscoveryBroadcastReceiver;
-    private IntentFilter bleDiscoveryIntentFilter;
+    private enum ScanState { NONE, LESCAN, DISCOVERY, DISCOVERY_FINISHED }
+    private ScanState                       scanState = ScanState.NONE;
+    private static final long               LESCAN_PERIOD = 10000; // similar to bluetoothAdapter.startDiscovery
+    private Handler                         leScanStopHandler = new Handler();
+    private BluetoothAdapter.LeScanCallback leScanCallback;
+    private BroadcastReceiver               discoveryBroadcastReceiver;
+    private IntentFilter                    discoveryIntentFilter;
 
-    private ArrayList<BluetoothDevice> listItems = new ArrayList<>();
-    private ArrayAdapter<BluetoothDevice> listAdapter;
-    private boolean scanning;
+    private Menu                            menu;
+    private BluetoothAdapter                bluetoothAdapter;
+    private ArrayList<BluetoothDevice>      listItems = new ArrayList<>();
+    private ArrayAdapter<BluetoothDevice>   listAdapter;
 
     public DevicesFragment() {
-        bleDiscoveryBroadcastReceiver = new BroadcastReceiver() {
+        leScanCallback = (device, rssi, scanRecord) -> {
+            if(device != null && getActivity() != null) {
+                getActivity().runOnUiThread(() -> { updateScan(device); });
+            }
+        };
+        discoveryBroadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 if(intent.getAction().equals(BluetoothDevice.ACTION_FOUND)) {
                     BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                    if(device.getType() != BluetoothDevice.DEVICE_TYPE_CLASSIC) {
+                    if(device.getType() != BluetoothDevice.DEVICE_TYPE_CLASSIC && getActivity() != null) {
                         getActivity().runOnUiThread(() -> updateScan(device));
                     }
                 }
                 if(intent.getAction().equals((BluetoothAdapter.ACTION_DISCOVERY_FINISHED))) {
+                    scanState = ScanState.DISCOVERY_FINISHED; // don't cancel again
                     stopScan();
                 }
             }
         };
-        bleDiscoveryIntentFilter = new IntentFilter();
-        bleDiscoveryIntentFilter.addAction(BluetoothDevice.ACTION_FOUND);
-        bleDiscoveryIntentFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+        discoveryIntentFilter = new IntentFilter();
+        discoveryIntentFilter.addAction(BluetoothDevice.ACTION_FOUND);
+        discoveryIntentFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
     }
 
     @Override
@@ -112,7 +125,7 @@ public class DevicesFragment extends ListFragment {
     @Override
     public void onResume() {
         super.onResume();
-        getActivity().registerReceiver(bleDiscoveryBroadcastReceiver, bleDiscoveryIntentFilter);
+        getActivity().registerReceiver(discoveryBroadcastReceiver, discoveryIntentFilter);
         if(bluetoothAdapter == null) {
             setEmptyText("<bluetooth LE not supported>");
         } else if(!bluetoothAdapter.isEnabled()) {
@@ -133,7 +146,7 @@ public class DevicesFragment extends ListFragment {
     public void onPause() {
         super.onPause();
         stopScan();
-        getActivity().unregisterReceiver(bleDiscoveryBroadcastReceiver);
+        getActivity().unregisterReceiver(discoveryBroadcastReceiver);
     }
 
     @Override
@@ -161,25 +174,56 @@ public class DevicesFragment extends ListFragment {
         }
     }
 
+    @SuppressLint("StaticFieldLeak") // AsyncTask needs reference to this fragment
     private void startScan() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                getActivity().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-            builder.setTitle(getText(R.string.location_permission_title));
-            builder.setMessage(getText(R.string.location_permission_message));
-            builder.setPositiveButton(android.R.string.ok,
-                    (dialog, which) -> requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 0));
-            builder.show();
+        if(scanState != ScanState.NONE)
             return;
+        scanState = ScanState.LESCAN;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (getActivity().checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                scanState = ScanState.NONE;
+                AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+                builder.setTitle(R.string.location_permission_title);
+                builder.setMessage(R.string.location_permission_message);
+                builder.setPositiveButton(android.R.string.ok,
+                        (dialog, which) -> requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 0));
+                builder.show();
+                return;
+            }
+            LocationManager locationManager = (LocationManager) getActivity().getSystemService(Context.LOCATION_SERVICE);
+            boolean         locationEnabled = false;
+            try {
+                locationEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+            } catch(Exception ignored) {}
+            try {
+                locationEnabled |= locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
+            } catch(Exception ignored) {}
+            if(!locationEnabled)
+                scanState = ScanState.DISCOVERY;
+            // Starting with Android 6.0 a bluetooth scan requires ACCESS_COARSE_LOCATION permission, but that's not all!
+            // LESCAN also needs enabled 'location services', whereas DISCOVERY works without.
+            // Most users think of GPS as 'location service', but it includes more, as we see here.
+            // Instead of asking the user to enable something they consider unrelated,
+            // we fall back to the older API that scans for bluetooth classic _and_ LE
+            // sometimes the older API returns less results or slower
         }
         listItems.clear();
         listAdapter.notifyDataSetChanged();
         setEmptyText("<scanning...>");
         menu.findItem(R.id.ble_scan).setVisible(false);
         menu.findItem(R.id.ble_scan_stop).setVisible(true);
-        bluetoothAdapter.startDiscovery();
-        scanning = true;
-        //  BluetoothLeScanner.startScan(...) would return more details, but that's not needed here
+        if(scanState == ScanState.LESCAN) {
+            leScanStopHandler.postDelayed(this::stopScan, LESCAN_PERIOD);
+            new AsyncTask<Void, Void, Void>() {
+                @Override
+                protected Void doInBackground(Void[] params) {
+                    bluetoothAdapter.startLeScan(null, leScanCallback);
+                    return null;
+                }
+            }.execute(); // start async to prevent blocking UI, because startLeScan sometimes take some seconds
+        } else {
+            bluetoothAdapter.startDiscovery();
+        }
     }
 
     @Override
@@ -197,6 +241,8 @@ public class DevicesFragment extends ListFragment {
     }
 
     private void updateScan(BluetoothDevice device) {
+        if(scanState == ScanState.NONE)
+            return;
         if(listItems.indexOf(device) < 0) {
             listItems.add(device);
             Collections.sort(listItems, DevicesFragment::compareTo);
@@ -205,15 +251,26 @@ public class DevicesFragment extends ListFragment {
     }
 
     private void stopScan() {
-        if(!scanning)
+        if(scanState == ScanState.NONE)
             return;
-        scanning = false;
         setEmptyText("<no bluetooth devices found>");
         if(menu != null) {
             menu.findItem(R.id.ble_scan).setVisible(true);
             menu.findItem(R.id.ble_scan_stop).setVisible(false);
         }
-        bluetoothAdapter.cancelDiscovery();
+        switch(scanState) {
+            case LESCAN:
+                leScanStopHandler.removeCallbacks(this::stopScan);
+                bluetoothAdapter.stopLeScan(leScanCallback);
+                break;
+            case DISCOVERY:
+                bluetoothAdapter.cancelDiscovery();
+                break;
+            default:
+                // already canceled
+        }
+        scanState = ScanState.NONE;
+
     }
 
     @Override

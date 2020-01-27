@@ -14,6 +14,7 @@ This app includes UUIDs for widely used serial profiles:
 - Nordic Semiconductor nRF51822  
 - Texas Instruments CC254x
 - Microchip RN4870/1
+- Telit Bluemod
 
 ## Motivation
 

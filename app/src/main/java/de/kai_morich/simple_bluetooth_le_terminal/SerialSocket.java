@@ -1,5 +1,6 @@
 package de.kai_morich.simple_bluetooth_le_terminal;
 
+import android.app.Activity;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
@@ -15,6 +16,7 @@ import android.os.Build;
 import android.util.Log;
 
 import java.io.IOException;
+import java.security.InvalidParameterException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.UUID;
@@ -77,7 +79,11 @@ class SerialSocket extends BluetoothGattCallback {
     private boolean connected;
     private int payloadSize = DEFAULT_MTU-3;
 
-    SerialSocket() {
+    SerialSocket(Context context, BluetoothDevice device) {
+        if(context instanceof Activity)
+            throw new InvalidParameterException("expected non UI context");
+        this.context = context;
+        this.device = device;
         writeBuffer = new ArrayList<>();
         pairingIntentFilter = new IntentFilter();
         pairingIntentFilter.addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED);
@@ -96,6 +102,10 @@ class SerialSocket extends BluetoothGattCallback {
                 disconnect(); // disconnect now, else would be queued until UI re-attached
             }
         };
+    }
+
+    String getName() {
+        return device.getName() != null ? device.getName() : device.getAddress();
     }
 
     void disconnect() {
@@ -134,13 +144,11 @@ class SerialSocket extends BluetoothGattCallback {
     /**
      * connect-success and most connect-errors are returned asynchronously to listener
      */
-    void connect(Context context, SerialListener listener, BluetoothDevice device) throws IOException {
+    void connect(SerialListener listener) throws IOException {
         if(connected || gatt != null)
             throw new IOException("already connected");
         canceled = false;
-        this.context = context;
         this.listener = listener;
-        this.device = device;
         context.registerReceiver(disconnectBroadcastReceiver, new IntentFilter(Constants.INTENT_ACTION_DISCONNECT));
         Log.d(TAG, "connect "+device);
         context.registerReceiver(pairingBroadcastReceiver, pairingIntentFilter);

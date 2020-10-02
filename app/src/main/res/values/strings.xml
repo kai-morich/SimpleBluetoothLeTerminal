@@ -1,5 +1,4 @@
 <resources>
-    <string name="app_name">Simple BLE Terminal</string>
     <string name="devices">Bluetooth LE Devices</string>
 
     <string name="location_permission_title">Location permission required</string>

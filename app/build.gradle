@@ -16,7 +16,12 @@ android {
         targetCompatibility JavaVersion.VERSION_1_8
     }
     buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            resValue "string", "app_name", "🐞 Simple BLE Terminal"
+        }
         release {
+            resValue "string", "app_name", "Simple BLE Terminal"
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

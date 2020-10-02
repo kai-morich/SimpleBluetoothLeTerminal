@@ -28,12 +28,16 @@ import android.widget.Toast;
 
 public class TerminalFragment extends Fragment implements ServiceConnection, SerialListener {
 
+    private boolean useHexMode = true;
+
+
     private enum Connected { False, Pending, True }
 
     private String deviceAddress;
-    private String newline = "\r\n";
+    private String newline = "";
 
     private TextView receiveText;
+    private TextView sendText;
 
     private SerialService service;
     private boolean initialStart = true;
@@ -120,7 +124,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
         receiveText = view.findViewById(R.id.receive_text);                          // TextView performance decreases with number of spans
         receiveText.setTextColor(getResources().getColor(R.color.colorRecieveText)); // set as default color to reduce number of spans
         receiveText.setMovementMethod(ScrollingMovementMethod.getInstance());
-        TextView sendText = view.findViewById(R.id.send_text);
+        sendText = view.findViewById(R.id.send_text);
         View sendBtn = view.findViewById(R.id.send_btn);
         sendBtn.setOnClickListener(v -> send(sendText.getText().toString()));
         return view;
@@ -142,14 +146,25 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
             String[] newlineValues = getResources().getStringArray(R.array.newline_values);
             int pos = java.util.Arrays.asList(newlineValues).indexOf(newline);
             AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-            builder.setTitle("Newline");
+            builder.setTitle("Newline Mode  ");
             builder.setSingleChoiceItems(newlineNames, pos, (dialog, item1) -> {
                 newline = newlineValues[item1];
                 dialog.dismiss();
             });
             builder.create().show();
             return true;
-        } else {
+        }else if (id ==R.id.charMode) {
+            String[] newlineNames = getResources().getStringArray(R.array.char_names);
+            int pos = useHexMode ? 0 : 1;
+            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+            builder.setTitle("Text Mode");
+            builder.setSingleChoiceItems(newlineNames, pos, (dialog, item1) -> {
+                useHexMode = item1 == 1;
+                dialog.dismiss();
+            });
+            builder.create().show();
+            return true;
+    } else {
             return super.onOptionsItemSelected(item);
         }
     }
@@ -181,18 +196,56 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
             return;
         }
         try {
-            SpannableStringBuilder spn = new SpannableStringBuilder(str+'\n');
-            spn.setSpan(new ForegroundColorSpan(getResources().getColor(R.color.colorSendText)), 0, spn.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            receiveText.append(spn);
-            byte[] data = (str + newline).getBytes();
-            service.write(data);
+            byte[] data;
+            if (useHexMode){
+                try {
+                    data = hexStringToBytes(str + newline);
+                } catch (NumberFormatException e){
+                    sendText.setError("Not valid hex!:");
+                    return;
+                }
+            } else {
+                data = (str + newline).getBytes();
+            }
+
+            if(data != null) {
+                SpannableStringBuilder spn = new SpannableStringBuilder("\n" + str + '\n');
+                spn.setSpan(new ForegroundColorSpan(getResources().getColor(R.color.colorSendText)), 0, spn.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                receiveText.append(spn);
+                service.write(data);
+            }
+
         } catch (Exception e) {
             onSerialIoError(e);
         }
     }
 
+    private byte[] hexStringToBytes(String hexString){
+        byte[] value = new byte[hexString.length() / 2];
+        for (int i = 0; i < value.length; i++) {
+            int index = i * 2;
+            int j = Integer.parseInt(hexString.substring(index, index + 2), 16);
+            value[i] = (byte) j;
+        }
+        return value;
+    }
+
+    private static final char[] HEX_ARRAY = "0123456789ABCDEF".toCharArray();
+    public static String bytesToHex(byte[] bytes) {
+        StringBuilder value = new StringBuilder();
+        for (byte aByte : bytes) {
+            int v = aByte & 0xFF;
+            value.append("0x").append(HEX_ARRAY[v >>> 4]).append(HEX_ARRAY[v & 0x0F]).append(" ");
+        }
+        return value.toString();
+    }
+
     private void receive(byte[] data) {
-        receiveText.append(new String(data));
+        if(useHexMode){
+            receiveText.append(bytesToHex(data));
+        } else {
+            receiveText.append(new String(data));
+        }
     }
 
     private void status(String str) {

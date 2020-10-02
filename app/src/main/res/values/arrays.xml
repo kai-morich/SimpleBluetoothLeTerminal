@@ -1,11 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="newline_names">
+        <item>nothing</item>
         <item>LF</item>
         <item>CR+LF</item>
     </string-array>
     <string-array name="newline_values">
+        <item></item>
         <item>\u000a</item>
         <item>\u000d\u000a</item>
+    </string-array>
+    <string-array name="char_names">
+        <item>hex</item>
+        <item>ASCII</item>
     </string-array>
 </resources>

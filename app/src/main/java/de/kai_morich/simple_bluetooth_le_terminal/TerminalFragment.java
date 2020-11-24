@@ -6,21 +6,25 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.text.Editable;
+import android.text.InputType;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.method.ScrollingMovementMethod;
 import android.text.style.ForegroundColorSpan;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -28,9 +32,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
+
+import static android.content.res.Configuration.KEYBOARD_12KEY;
+
 public class TerminalFragment extends Fragment implements ServiceConnection, SerialListener {
 
-    private enum Connected { False, Pending, True }
+    private enum Connected {False, Pending, True}
 
     private String deviceAddress;
     private SerialService service;
@@ -67,7 +78,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     @Override
     public void onStart() {
         super.onStart();
-        if(service != null)
+        if (service != null)
             service.attach(this);
         else
             getActivity().startService(new Intent(getActivity(), SerialService.class)); // prevents service destroy on unbind from recreated activity caused by orientation change
@@ -75,12 +86,13 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
 
     @Override
     public void onStop() {
-        if(service != null && !getActivity().isChangingConfigurations())
+        if (service != null && !getActivity().isChangingConfigurations())
             service.detach();
         super.onStop();
     }
 
-    @SuppressWarnings("deprecation") // onAttach(context) was added with API 23. onAttach(activity) works for all API versions
+    @SuppressWarnings("deprecation")
+    // onAttach(context) was added with API 23. onAttach(activity) works for all API versions
     @Override
     public void onAttach(@NonNull Activity activity) {
         super.onAttach(activity);
@@ -89,14 +101,17 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
 
     @Override
     public void onDetach() {
-        try { getActivity().unbindService(this); } catch(Exception ignored) {}
+        try {
+            getActivity().unbindService(this);
+        } catch (Exception ignored) {
+        }
         super.onDetach();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if(initialStart && service != null) {
+        if (initialStart && service != null) {
             initialStart = false;
             getActivity().runOnUiThread(this::connect);
         }
@@ -106,7 +121,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     public void onServiceConnected(ComponentName name, IBinder binder) {
         service = ((SerialService.SerialBinder) binder).getService();
         service.attach(this);
-        if(initialStart && isResumed()) {
+        if (initialStart && isResumed()) {
             initialStart = false;
             getActivity().runOnUiThread(this::connect);
         }
@@ -144,6 +159,8 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
         menu.findItem(R.id.hex).setChecked(hexEnabled);
     }
 
+    protected TcpMultiServer tcpserver;
+
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int id = item.getItemId();
@@ -168,6 +185,55 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
             hexWatcher.enable(hexEnabled);
             sendText.setHint(hexEnabled ? "HEX mode" : "");
             item.setChecked(hexEnabled);
+            return true;
+        } else if (id == R.id.tcpserver) {
+            if (item.isChecked()) {
+                status("stop server");
+                if (tcpserver != null)
+                    tcpserver.stop();
+                if (clientSocket != null) {
+                    try {
+                        clientSocket.close();
+                    } catch (Exception e) {
+                    }
+                }
+                item.setChecked(false);
+                return true;
+            }
+            AlertDialog.Builder alert = new AlertDialog.Builder(getActivity());
+            alert.setTitle("Select Port number");
+            final EditText input = new EditText(getActivity());
+            input.setInputType(InputType.TYPE_CLASS_NUMBER);
+            input.setRawInputType(KEYBOARD_12KEY);
+            input.setText("3000");
+            alert.setView(input);
+            alert.setPositiveButton("Ok", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+                    //Put actions for OK button here
+                    Log.d("port", "cliecked on" + input.getText());
+                    int port;
+                    try {
+                        port = Integer.parseInt(input.getText().toString());
+                    } catch (NumberFormatException nfe) {
+                        port = 3000;
+                    }
+                    status("tcpserver started on port: " + port + "\n");
+                    tcpserver = new TcpMultiServer(port, "ble-server", true) {
+                        @Override
+                        public void newclient(Socket clientSocket) {
+                            new Thread(new BLEserver(clientSocket)).start();
+                        }
+                    };
+                    new Thread(tcpserver).start();
+                    item.setChecked(true);
+                }
+            });
+            alert.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+                    item.setChecked(false);
+                }
+            });
+            alert.show();
             return true;
         } else {
             return super.onOptionsItemSelected(item);
@@ -196,14 +262,14 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     }
 
     private void send(String str) {
-        if(connected != Connected.True) {
+        if (connected != Connected.True) {
             Toast.makeText(getActivity(), "not connected", Toast.LENGTH_SHORT).show();
             return;
         }
         try {
             String msg;
             byte[] data;
-            if(hexEnabled) {
+            if (hexEnabled) {
                 StringBuilder sb = new StringBuilder();
                 TextUtil.toHexString(sb, TextUtil.fromHexString(str));
                 TextUtil.toHexString(sb, newline.getBytes());
@@ -213,7 +279,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
                 msg = str;
                 data = (str + newline).getBytes();
             }
-            SpannableStringBuilder spn = new SpannableStringBuilder(msg+'\n');
+            SpannableStringBuilder spn = new SpannableStringBuilder(msg + '\n');
             spn.setSpan(new ForegroundColorSpan(getResources().getColor(R.color.colorSendText)), 0, spn.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             receiveText.append(spn);
             service.write(data);
@@ -223,11 +289,17 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     }
 
     private void receive(byte[] data) {
-        if(hexEnabled) {
+        if (tcpoutput != null) {
+            try {
+                tcpoutput.write(data);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else if (hexEnabled) {
             receiveText.append(TextUtil.toHexString(data) + '\n');
         } else {
             String msg = new String(data);
-            if(newline.equals(TextUtil.newline_crlf) && msg.length() > 0) {
+            if (newline.equals(TextUtil.newline_crlf) && msg.length() > 0) {
                 // don't show CR as ^M if directly before LF
                 msg = msg.replace(TextUtil.newline_crlf, TextUtil.newline_lf);
                 // special handling if CR and LF come in separate fragments
@@ -243,7 +315,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     }
 
     private void status(String str) {
-        SpannableStringBuilder spn = new SpannableStringBuilder(str+'\n');
+        SpannableStringBuilder spn = new SpannableStringBuilder(str + '\n');
         spn.setSpan(new ForegroundColorSpan(getResources().getColor(R.color.colorStatusText)), 0, spn.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         receiveText.append(spn);
     }
@@ -274,4 +346,43 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
         disconnect();
     }
 
+    protected Socket clientSocket = null;
+
+    protected OutputStream tcpoutput = null;
+
+    private class BLEserver implements Runnable {
+        protected InputStream input;
+
+        public BLEserver(Socket clientSocketin) {
+            status("tcpserver: client connected");
+            try {
+                this.input = clientSocketin.getInputStream();
+                tcpoutput = clientSocketin.getOutputStream();
+                clientSocket = clientSocketin;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        public void run() {
+            try {
+                byte inputdata[] = new byte[160];
+                while (42 == 42) {
+                    int len;
+
+                    if ((len = input.read(inputdata)) < 0) {
+                        tcpoutput = null;
+                        break;
+                    }
+                    byte[] result = new byte[len];
+                    System.arraycopy(inputdata, 0, result, 0, len);
+                    service.write(result);
+                }
+            } catch (IOException e) {
+                tcpoutput = null;
+                e.printStackTrace();
+            }
+            status("tcpserver: client disconnected");
+        }
+    }
 }

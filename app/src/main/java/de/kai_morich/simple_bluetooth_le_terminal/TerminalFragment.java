@@ -8,6 +8,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.text.Editable;
@@ -26,11 +27,14 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.fragment.app.Fragment;
+
+import java.util.Objects;
 
 public class TerminalFragment extends Fragment implements ServiceConnection, SerialListener {
 
-    private enum Connected { False, Pending, True }
+    private enum Connected {False, Pending, True}
 
     private String deviceAddress;
     private SerialService service;
@@ -53,6 +57,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true);
         setRetainInstance(true);
+        assert getArguments() != null;
         deviceAddress = getArguments().getString("device");
     }
 
@@ -60,45 +65,49 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     public void onDestroy() {
         if (connected != Connected.False)
             disconnect();
-        getActivity().stopService(new Intent(getActivity(), SerialService.class));
+        Objects.requireNonNull(getActivity()).stopService(new Intent(getActivity(), SerialService.class));
         super.onDestroy();
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        if(service != null)
+        if (service != null)
             service.attach(this);
         else
-            getActivity().startService(new Intent(getActivity(), SerialService.class)); // prevents service destroy on unbind from recreated activity caused by orientation change
+            Objects.requireNonNull(getActivity()).startService(new Intent(getActivity(), SerialService.class)); // prevents service destroy on unbind from recreated activity caused by orientation change
     }
 
     @Override
     public void onStop() {
-        if(service != null && !getActivity().isChangingConfigurations())
+        if (service != null && !Objects.requireNonNull(getActivity()).isChangingConfigurations())
             service.detach();
         super.onStop();
     }
 
-    @SuppressWarnings("deprecation") // onAttach(context) was added with API 23. onAttach(activity) works for all API versions
+    @SuppressWarnings("deprecation")
+    // onAttach(context) was added with API 23. onAttach(activity) works for all API versions
     @Override
     public void onAttach(@NonNull Activity activity) {
         super.onAttach(activity);
-        getActivity().bindService(new Intent(getActivity(), SerialService.class), this, Context.BIND_AUTO_CREATE);
+        Objects.requireNonNull(getActivity()).bindService(new Intent(getActivity(), SerialService.class), this, Context.BIND_AUTO_CREATE);
     }
 
     @Override
     public void onDetach() {
-        try { getActivity().unbindService(this); } catch(Exception ignored) {}
+        try {
+            Objects.requireNonNull(getActivity()).unbindService(this);
+        } catch (Exception ignored) {
+        }
         super.onDetach();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        if(initialStart && service != null) {
+        if (initialStart && service != null) {
             initialStart = false;
-            getActivity().runOnUiThread(this::connect);
+            Objects.requireNonNull(getActivity()).runOnUiThread(this::connect);
         }
     }
 
@@ -106,9 +115,9 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     public void onServiceConnected(ComponentName name, IBinder binder) {
         service = ((SerialService.SerialBinder) binder).getService();
         service.attach(this);
-        if(initialStart && isResumed()) {
+        if (initialStart && isResumed()) {
             initialStart = false;
-            getActivity().runOnUiThread(this::connect);
+            Objects.requireNonNull(getActivity()).runOnUiThread(this::connect);
         }
     }
 
@@ -177,13 +186,14 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     /*
      * Serial + UI
      */
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     private void connect() {
         try {
             BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
             BluetoothDevice device = bluetoothAdapter.getRemoteDevice(deviceAddress);
             status("connecting...");
             connected = Connected.Pending;
-            SerialSocket socket = new SerialSocket(getActivity().getApplicationContext(), device);
+            SerialSocket socket = new SerialSocket(Objects.requireNonNull(getActivity()).getApplicationContext(), device);
             service.connect(socket);
         } catch (Exception e) {
             onSerialConnectError(e);
@@ -196,14 +206,14 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     }
 
     private void send(String str) {
-        if(connected != Connected.True) {
+        if (connected != Connected.True) {
             Toast.makeText(getActivity(), "not connected", Toast.LENGTH_SHORT).show();
             return;
         }
         try {
             String msg;
             byte[] data;
-            if(hexEnabled) {
+            if (hexEnabled) {
                 StringBuilder sb = new StringBuilder();
                 TextUtil.toHexString(sb, TextUtil.fromHexString(str));
                 TextUtil.toHexString(sb, newline.getBytes());
@@ -213,7 +223,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
                 msg = str;
                 data = (str + newline).getBytes();
             }
-            SpannableStringBuilder spn = new SpannableStringBuilder(msg+'\n');
+            SpannableStringBuilder spn = new SpannableStringBuilder(msg + '\n');
             spn.setSpan(new ForegroundColorSpan(getResources().getColor(R.color.colorSendText)), 0, spn.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             receiveText.append(spn);
             service.write(data);
@@ -223,11 +233,11 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     }
 
     private void receive(byte[] data) {
-        if(hexEnabled) {
+        if (hexEnabled) {
             receiveText.append(TextUtil.toHexString(data) + '\n');
         } else {
             String msg = new String(data);
-            if(newline.equals(TextUtil.newline_crlf) && msg.length() > 0) {
+            if (newline.equals(TextUtil.newline_crlf) && msg.length() > 0) {
                 // don't show CR as ^M if directly before LF
                 msg = msg.replace(TextUtil.newline_crlf, TextUtil.newline_lf);
                 // special handling if CR and LF come in separate fragments
@@ -243,7 +253,7 @@ public class TerminalFragment extends Fragment implements ServiceConnection, Ser
     }
 
     private void status(String str) {
-        SpannableStringBuilder spn = new SpannableStringBuilder(str+'\n');
+        SpannableStringBuilder spn = new SpannableStringBuilder(str + '\n');
         spn.setSpan(new ForegroundColorSpan(getResources().getColor(R.color.colorStatusText)), 0, spn.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
         receiveText.append(spn);
     }

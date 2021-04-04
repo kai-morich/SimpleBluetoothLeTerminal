@@ -31,7 +31,7 @@ class SerialSocket extends BluetoothGattCallback {
     /**
      * delegate device specific behaviour to inner class
      */
-    private class DeviceDelegate {
+    private static class DeviceDelegate {
         boolean connectCharacteristics(BluetoothGattService s) { return true; }
         // following methods only overwritten for Telit devices
         void onDescriptorWrite(BluetoothGatt g, BluetoothGattDescriptor d, int status) { /*nop*/ }
@@ -67,7 +67,7 @@ class SerialSocket extends BluetoothGattCallback {
     private final BroadcastReceiver pairingBroadcastReceiver;
     private final BroadcastReceiver disconnectBroadcastReceiver;
 
-    private Context context;
+    private final Context context;
     private SerialListener listener;
     private DeviceDelegate delegate;
     private BluetoothDevice device;
@@ -568,7 +568,7 @@ class SerialSocket extends BluetoothGattCallback {
         @Override
         void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
             if(characteristic == readCreditsCharacteristic) { // NOPMD - test object identity
-                int newCredits = (int) (readCreditsCharacteristic.getValue()[0]);
+                int newCredits = readCreditsCharacteristic.getValue()[0];
                 synchronized (writeBuffer) {
                     writeCredits += newCredits;
                 }

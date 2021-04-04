@@ -36,18 +36,18 @@ import java.util.Collections;
  */
 public class DevicesFragment extends ListFragment {
 
-    private enum ScanState { NONE, LESCAN, DISCOVERY, DISCOVERY_FINISHED }
-    private ScanState                       scanState = ScanState.NONE;
-    private static final long               LESCAN_PERIOD = 10000; // similar to bluetoothAdapter.startDiscovery
-    private Handler                         leScanStopHandler = new Handler();
-    private BluetoothAdapter.LeScanCallback leScanCallback;
-    private BroadcastReceiver               discoveryBroadcastReceiver;
-    private IntentFilter                    discoveryIntentFilter;
+    private enum ScanState { NONE, LE_SCAN, DISCOVERY, DISCOVERY_FINISHED }
+    private ScanState scanState = ScanState.NONE;
+    private static final long LE_SCAN_PERIOD = 10000; // similar to bluetoothAdapter.startDiscovery
+    private final Handler leScanStopHandler = new Handler();
+    private final BluetoothAdapter.LeScanCallback leScanCallback;
+    private final BroadcastReceiver discoveryBroadcastReceiver;
+    private final IntentFilter discoveryIntentFilter;
 
-    private Menu                            menu;
-    private BluetoothAdapter                bluetoothAdapter;
-    private ArrayList<BluetoothDevice>      listItems = new ArrayList<>();
-    private ArrayAdapter<BluetoothDevice>   listAdapter;
+    private Menu menu;
+    private BluetoothAdapter bluetoothAdapter;
+    private final ArrayList<BluetoothDevice> listItems = new ArrayList<>();
+    private ArrayAdapter<BluetoothDevice> listAdapter;
 
     public DevicesFragment() {
         leScanCallback = (device, rssi, scanRecord) -> {
@@ -58,13 +58,13 @@ public class DevicesFragment extends ListFragment {
         discoveryBroadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                if(intent.getAction().equals(BluetoothDevice.ACTION_FOUND)) {
+                if(BluetoothDevice.ACTION_FOUND.equals(intent.getAction())) {
                     BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                     if(device.getType() != BluetoothDevice.DEVICE_TYPE_CLASSIC && getActivity() != null) {
                         getActivity().runOnUiThread(() -> updateScan(device));
                     }
                 }
-                if(intent.getAction().equals((BluetoothAdapter.ACTION_DISCOVERY_FINISHED))) {
+                if(BluetoothAdapter.ACTION_DISCOVERY_FINISHED.equals(intent.getAction())) {
                     scanState = ScanState.DISCOVERY_FINISHED; // don't cancel again
                     stopScan();
                 }
@@ -82,8 +82,9 @@ public class DevicesFragment extends ListFragment {
         if(getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
             bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         listAdapter = new ArrayAdapter<BluetoothDevice>(getActivity(), 0, listItems) {
+            @NonNull
             @Override
-            public View getView(int position, View view, ViewGroup parent) {
+            public View getView(int position, View view, @NonNull ViewGroup parent) {
                 BluetoothDevice device = listItems.get(position);
                 if (view == null)
                     view = getActivity().getLayoutInflater().inflate(R.layout.device_list_item, parent, false);
@@ -111,7 +112,7 @@ public class DevicesFragment extends ListFragment {
     }
 
     @Override
-    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+    public void onCreateOptionsMenu(@NonNull Menu menu, MenuInflater inflater) {
         inflater.inflate(R.menu.menu_devices, menu);
         this.menu = menu;
         if (bluetoothAdapter == null) {
@@ -178,7 +179,7 @@ public class DevicesFragment extends ListFragment {
     private void startScan() {
         if(scanState != ScanState.NONE)
             return;
-        scanState = ScanState.LESCAN;
+        scanState = ScanState.LE_SCAN;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (getActivity().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 scanState = ScanState.NONE;
@@ -212,8 +213,8 @@ public class DevicesFragment extends ListFragment {
         setEmptyText("<scanning...>");
         menu.findItem(R.id.ble_scan).setVisible(false);
         menu.findItem(R.id.ble_scan_stop).setVisible(true);
-        if(scanState == ScanState.LESCAN) {
-            leScanStopHandler.postDelayed(this::stopScan, LESCAN_PERIOD);
+        if(scanState == ScanState.LE_SCAN) {
+            leScanStopHandler.postDelayed(this::stopScan, LE_SCAN_PERIOD);
             new AsyncTask<Void, Void, Void>() {
                 @Override
                 protected Void doInBackground(Void[] params) {
@@ -243,7 +244,7 @@ public class DevicesFragment extends ListFragment {
     private void updateScan(BluetoothDevice device) {
         if(scanState == ScanState.NONE)
             return;
-        if(listItems.indexOf(device) < 0) {
+        if(!listItems.contains(device)) {
             listItems.add(device);
             Collections.sort(listItems, DevicesFragment::compareTo);
             listAdapter.notifyDataSetChanged();
@@ -259,7 +260,7 @@ public class DevicesFragment extends ListFragment {
             menu.findItem(R.id.ble_scan_stop).setVisible(false);
         }
         switch(scanState) {
-            case LESCAN:
+            case LE_SCAN:
                 leScanStopHandler.removeCallbacks(this::stopScan);
                 bluetoothAdapter.stopLeScan(leScanCallback);
                 break;
@@ -274,7 +275,7 @@ public class DevicesFragment extends ListFragment {
     }
 
     @Override
-    public void onListItemClick(ListView l, View v, int position, long id) {
+    public void onListItemClick(@NonNull ListView l, @NonNull View v, int position, long id) {
         stopScan();
         BluetoothDevice device = listItems.get(position-1);
         Bundle args = new Bundle();

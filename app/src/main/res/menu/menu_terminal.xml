@@ -15,4 +15,10 @@
         android:title="HEX Mode"
         android:checkable="true"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/tcpserver"
+        android:checkable="true"
+        android:checked="false"
+        android:title="Server"
+        app:showAsAction="never" />
 </menu>

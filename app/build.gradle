@@ -1,9 +1,9 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 29
+    compileSdkVersion 30
     defaultConfig {
-        targetSdkVersion 29
+        targetSdkVersion 30 // new permissions have to be used with 31
         minSdkVersion 18
         vectorDrawables.useSupportLibrary true
 

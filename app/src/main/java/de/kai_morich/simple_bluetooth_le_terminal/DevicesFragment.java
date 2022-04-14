@@ -41,6 +41,7 @@ public class DevicesFragment extends ListFragment {
     private static final long LE_SCAN_PERIOD = 10000; // similar to bluetoothAdapter.startDiscovery
     private final Handler leScanStopHandler = new Handler();
     private final BluetoothAdapter.LeScanCallback leScanCallback;
+    private final Runnable leScanStopCallback;
     private final BroadcastReceiver discoveryBroadcastReceiver;
     private final IntentFilter discoveryIntentFilter;
 
@@ -73,6 +74,7 @@ public class DevicesFragment extends ListFragment {
         discoveryIntentFilter = new IntentFilter();
         discoveryIntentFilter.addAction(BluetoothDevice.ACTION_FOUND);
         discoveryIntentFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
+        leScanStopCallback = this::stopScan; // w/o explicit Runnable, a new lambda would be created on each postDelayed, which would not be found again by removeCallbacks
     }
 
     @Override
@@ -214,7 +216,7 @@ public class DevicesFragment extends ListFragment {
         menu.findItem(R.id.ble_scan).setVisible(false);
         menu.findItem(R.id.ble_scan_stop).setVisible(true);
         if(scanState == ScanState.LE_SCAN) {
-            leScanStopHandler.postDelayed(this::stopScan, LE_SCAN_PERIOD);
+            leScanStopHandler.postDelayed(leScanStopCallback, LE_SCAN_PERIOD);
             new AsyncTask<Void, Void, Void>() {
                 @Override
                 protected Void doInBackground(Void[] params) {
@@ -261,7 +263,7 @@ public class DevicesFragment extends ListFragment {
         }
         switch(scanState) {
             case LE_SCAN:
-                leScanStopHandler.removeCallbacks(this::stopScan);
+                leScanStopHandler.removeCallbacks(leScanStopCallback);
                 bluetoothAdapter.stopLeScan(leScanCallback);
                 break;
             case DISCOVERY:

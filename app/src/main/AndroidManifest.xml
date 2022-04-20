@@ -6,6 +6,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission-sdk-23 android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!-- mipmap/ic_launcher created with Android Studio -> New -> Image Asset using @color/colorPrimaryDark as background color -->

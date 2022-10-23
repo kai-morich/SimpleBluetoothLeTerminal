@@ -16,9 +16,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import androidx.annotation.NonNull;
-import androidx.fragment.app.Fragment;
-import androidx.fragment.app.ListFragment;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
@@ -27,6 +24,12 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
+import androidx.fragment.app.Fragment;
+import androidx.fragment.app.ListFragment;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,6 +52,8 @@ public class DevicesFragment extends ListFragment {
     private BluetoothAdapter bluetoothAdapter;
     private final ArrayList<BluetoothDevice> listItems = new ArrayList<>();
     private ArrayAdapter<BluetoothDevice> listAdapter;
+    ActivityResultLauncher<String[]> requestBluetoothPermissionLauncherForStartScan;
+    ActivityResultLauncher<String> requestLocationPermissionLauncherForStartScan;
 
     public DevicesFragment() {
         leScanCallback = (device, rssi, scanRecord) -> {
@@ -57,6 +62,7 @@ public class DevicesFragment extends ListFragment {
             }
         };
         discoveryBroadcastReceiver = new BroadcastReceiver() {
+            @SuppressLint("MissingPermission")
             @Override
             public void onReceive(Context context, Intent intent) {
                 if(BluetoothDevice.ACTION_FOUND.equals(intent.getAction())) {
@@ -75,6 +81,22 @@ public class DevicesFragment extends ListFragment {
         discoveryIntentFilter.addAction(BluetoothDevice.ACTION_FOUND);
         discoveryIntentFilter.addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED);
         leScanStopCallback = this::stopScan; // w/o explicit Runnable, a new lambda would be created on each postDelayed, which would not be found again by removeCallbacks
+        requestBluetoothPermissionLauncherForStartScan = registerForActivityResult(
+                new ActivityResultContracts.RequestMultiplePermissions(),
+                granted -> BluetoothUtil.onPermissionsResult(this, granted, this::startScan));
+        requestLocationPermissionLauncherForStartScan = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                granted -> {
+                    if (granted) {
+                        new Handler(Looper.getMainLooper()).postDelayed(this::startScan, 1); // run after onResume to avoid wrong empty-text
+                    } else {
+                        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+                        builder.setTitle(getText(R.string.location_permission_title));
+                        builder.setMessage(getText(R.string.location_permission_denied));
+                        builder.setPositiveButton(android.R.string.ok, null);
+                        builder.show();
+                    }
+                });
     }
 
     @Override
@@ -92,10 +114,10 @@ public class DevicesFragment extends ListFragment {
                     view = getActivity().getLayoutInflater().inflate(R.layout.device_list_item, parent, false);
                 TextView text1 = view.findViewById(R.id.text1);
                 TextView text2 = view.findViewById(R.id.text2);
-                if(device.getName() == null || device.getName().isEmpty())
-                    text1.setText("<unnamed>");
-                else
-                    text1.setText(device.getName());
+                @SuppressLint("MissingPermission") String deviceName = device.getName();
+                if(deviceName == null || deviceName.isEmpty())
+                    deviceName = "<unnamed>";
+                text1.setText(deviceName);
                 text2.setText(device.getAddress());
                 return view;
             }
@@ -177,19 +199,21 @@ public class DevicesFragment extends ListFragment {
         }
     }
 
-    @SuppressLint("StaticFieldLeak") // AsyncTask needs reference to this fragment
     private void startScan() {
         if(scanState != ScanState.NONE)
             return;
-        scanState = ScanState.LE_SCAN;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        ScanState nextScanState = ScanState.LE_SCAN;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if(!BluetoothUtil.hasPermissions(this, requestBluetoothPermissionLauncherForStartScan))
+                return;
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (getActivity().checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
                 scanState = ScanState.NONE;
                 AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
                 builder.setTitle(R.string.location_permission_title);
-                builder.setMessage(R.string.location_permission_message);
+                builder.setMessage(R.string.location_permission_grant);
                 builder.setPositiveButton(android.R.string.ok,
-                        (dialog, which) -> requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 0));
+                        (dialog, which) -> requestLocationPermissionLauncherForStartScan.launch(Manifest.permission.ACCESS_FINE_LOCATION));
                 builder.show();
                 return;
             }
@@ -210,6 +234,7 @@ public class DevicesFragment extends ListFragment {
             // we fall back to the older API that scans for bluetooth classic _and_ LE
             // sometimes the older API returns less results or slower
         }
+        scanState = nextScanState;
         listItems.clear();
         listAdapter.notifyDataSetChanged();
         setEmptyText("<scanning...>");
@@ -217,29 +242,10 @@ public class DevicesFragment extends ListFragment {
         menu.findItem(R.id.ble_scan_stop).setVisible(true);
         if(scanState == ScanState.LE_SCAN) {
             leScanStopHandler.postDelayed(leScanStopCallback, LE_SCAN_PERIOD);
-            new AsyncTask<Void, Void, Void>() {
-                @Override
-                protected Void doInBackground(Void[] params) {
-                    bluetoothAdapter.startLeScan(null, leScanCallback);
-                    return null;
-                }
-            }.execute(); // start async to prevent blocking UI, because startLeScan sometimes take some seconds
+            new Thread(() -> bluetoothAdapter.startLeScan(null, leScanCallback), "startLeScan")
+                    .start(); // start async to prevent blocking UI, because startLeScan sometimes take some seconds
         } else {
             bluetoothAdapter.startDiscovery();
-        }
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
-        // ignore requestCode as there is only one in this fragment
-        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            new Handler(Looper.getMainLooper()).postDelayed(this::startScan,1); // run after onResume to avoid wrong empty-text
-        } else {
-            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
-            builder.setTitle(getText(R.string.location_denied_title));
-            builder.setMessage(getText(R.string.location_denied_message));
-            builder.setPositiveButton(android.R.string.ok, null);
-            builder.show();
         }
     }
 
@@ -248,11 +254,12 @@ public class DevicesFragment extends ListFragment {
             return;
         if(!listItems.contains(device)) {
             listItems.add(device);
-            Collections.sort(listItems, DevicesFragment::compareTo);
+            Collections.sort(listItems, BluetoothUtil::compareTo);
             listAdapter.notifyDataSetChanged();
         }
     }
 
+    @SuppressLint("MissingPermission")
     private void stopScan() {
         if(scanState == ScanState.NONE)
             return;
@@ -285,21 +292,5 @@ public class DevicesFragment extends ListFragment {
         Fragment fragment = new TerminalFragment();
         fragment.setArguments(args);
         getFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "terminal").addToBackStack(null).commit();
-    }
-
-    /**
-     * sort by name, then address. sort named devices first
-     */
-    static int compareTo(BluetoothDevice a, BluetoothDevice b) {
-        boolean aValid = a.getName()!=null && !a.getName().isEmpty();
-        boolean bValid = b.getName()!=null && !b.getName().isEmpty();
-        if(aValid && bValid) {
-            int ret = a.getName().compareTo(b.getName());
-            if (ret != 0) return ret;
-            return a.getAddress().compareTo(b.getAddress());
-        }
-        if(aValid) return -1;
-        if(bValid) return +1;
-        return a.getAddress().compareTo(b.getAddress());
     }
 }

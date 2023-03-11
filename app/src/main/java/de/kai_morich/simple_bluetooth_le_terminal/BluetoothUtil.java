@@ -21,22 +21,48 @@ public class BluetoothUtil {
         void call();
     }
 
-    /**
-     * sort by name, then address. sort named devices first
+    /*
+     * more efficient caching of name than BluetoothDevice which always does RPC
      */
-    @SuppressLint("MissingPermission")
-    static int compareTo(BluetoothDevice a, BluetoothDevice b) {
-        boolean aValid = a.getName()!=null && !a.getName().isEmpty();
-        boolean bValid = b.getName()!=null && !b.getName().isEmpty();
-        if(aValid && bValid) {
-            int ret = a.getName().compareTo(b.getName());
-            if (ret != 0) return ret;
-            return a.getAddress().compareTo(b.getAddress());
+    static class Device implements Comparable<Device> {
+        BluetoothDevice device;
+        String name;
+
+        @SuppressLint("MissingPermission")
+        public Device(BluetoothDevice device) {
+            this.device = device;
+            this.name = device.getName();
         }
-        if(aValid) return -1;
-        if(bValid) return +1;
-        return a.getAddress().compareTo(b.getAddress());
+
+        public BluetoothDevice getDevice() { return device; }
+        public String getName() { return name; }
+
+        @Override
+        public boolean equals(Object o) {
+            if (o instanceof Device)
+                return device.equals(((Device) o).device);
+            return false;
+        }
+
+        /**
+         * sort by name, then address. sort named devices first
+         */
+        @Override
+        public int compareTo(Device other) {
+            boolean thisValid = this.name!=null && !this.name.isEmpty();
+            boolean otherValid = other.name!=null && !other.name.isEmpty();
+            if(thisValid && otherValid) {
+                int ret = this.name.compareTo(other.name);
+                if (ret != 0) return ret;
+                return this.device.getAddress().compareTo(other.device.getAddress());
+            }
+            if(thisValid) return -1;
+            if(otherValid) return +1;
+            return this.device.getAddress().compareTo(other.device.getAddress());
+        }
+
     }
+
 
     /**
      * Android 12 permission handling

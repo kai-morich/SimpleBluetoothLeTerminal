@@ -1,5 +1,6 @@
 package de.kai_morich.simple_bluetooth_le_terminal;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -26,6 +27,7 @@ import java.util.UUID;
  *   - connect, disconnect and write as methods,
  *   - read + status is returned by SerialListener
  */
+@SuppressLint("MissingPermission") // various BluetoothGatt, BluetoothDevice methods
 class SerialSocket extends BluetoothGattCallback {
 
     /**

@@ -11,7 +11,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
-import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -50,8 +49,8 @@ public class DevicesFragment extends ListFragment {
 
     private Menu menu;
     private BluetoothAdapter bluetoothAdapter;
-    private final ArrayList<BluetoothDevice> listItems = new ArrayList<>();
-    private ArrayAdapter<BluetoothDevice> listAdapter;
+    private final ArrayList<BluetoothUtil.Device> listItems = new ArrayList<>();
+    private ArrayAdapter<BluetoothUtil.Device> listAdapter;
     ActivityResultLauncher<String[]> requestBluetoothPermissionLauncherForStartScan;
     ActivityResultLauncher<String> requestLocationPermissionLauncherForStartScan;
 
@@ -105,20 +104,20 @@ public class DevicesFragment extends ListFragment {
         setHasOptionsMenu(true);
         if(getActivity().getPackageManager().hasSystemFeature(PackageManager.FEATURE_BLUETOOTH))
             bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        listAdapter = new ArrayAdapter<BluetoothDevice>(getActivity(), 0, listItems) {
+        listAdapter = new ArrayAdapter<BluetoothUtil.Device>(getActivity(), 0, listItems) {
             @NonNull
             @Override
             public View getView(int position, View view, @NonNull ViewGroup parent) {
-                BluetoothDevice device = listItems.get(position);
+                BluetoothUtil.Device device = listItems.get(position);
                 if (view == null)
                     view = getActivity().getLayoutInflater().inflate(R.layout.device_list_item, parent, false);
                 TextView text1 = view.findViewById(R.id.text1);
                 TextView text2 = view.findViewById(R.id.text2);
-                @SuppressLint("MissingPermission") String deviceName = device.getName();
+                String deviceName = device.getName();
                 if(deviceName == null || deviceName.isEmpty())
                     deviceName = "<unnamed>";
                 text1.setText(deviceName);
-                text2.setText(device.getAddress());
+                text2.setText(device.getDevice().getAddress());
                 return view;
             }
         };
@@ -249,12 +248,14 @@ public class DevicesFragment extends ListFragment {
         }
     }
 
+    @SuppressLint("MissingPermission")
     private void updateScan(BluetoothDevice device) {
         if(scanState == ScanState.NONE)
             return;
-        if(!listItems.contains(device)) {
-            listItems.add(device);
-            Collections.sort(listItems, BluetoothUtil::compareTo);
+        BluetoothUtil.Device device2 = new BluetoothUtil.Device(device); // slow getName() only once
+        int pos = Collections.binarySearch(listItems, device2);
+        if (pos < 0) {
+            listItems.add(-pos - 1, device2);
             listAdapter.notifyDataSetChanged();
         }
     }
@@ -286,9 +287,9 @@ public class DevicesFragment extends ListFragment {
     @Override
     public void onListItemClick(@NonNull ListView l, @NonNull View v, int position, long id) {
         stopScan();
-        BluetoothDevice device = listItems.get(position-1);
+        BluetoothUtil.Device device = listItems.get(position-1);
         Bundle args = new Bundle();
-        args.putString("device", device.getAddress());
+        args.putString("device", device.getDevice().getAddress());
         Fragment fragment = new TerminalFragment();
         fragment.setArguments(args);
         getFragmentManager().beginTransaction().replace(R.id.fragment, fragment, "terminal").addToBackStack(null).commit();

@@ -49,8 +49,9 @@ class SerialSocket extends BluetoothGattCallback {
     private static final UUID BLUETOOTH_LE_NRF_SERVICE    = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
     private static final UUID BLUETOOTH_LE_NRF_CHAR_RW2   = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e"); // read on microbit, write on adafruit
     private static final UUID BLUETOOTH_LE_NRF_CHAR_RW3   = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
-    private static final UUID BLUETOOTH_LE_RN4870_SERVICE = UUID.fromString("49535343-FE7D-4AE5-8FA9-9FAFD205E455");
-    private static final UUID BLUETOOTH_LE_RN4870_CHAR_RW = UUID.fromString("49535343-1E4D-4BD9-BA61-23C647249616");
+    private static final UUID BLUETOOTH_LE_MICROCHIP_SERVICE    = UUID.fromString("49535343-FE7D-4AE5-8FA9-9FAFD205E455");
+    private static final UUID BLUETOOTH_LE_MICROCHIP_CHAR_RW    = UUID.fromString("49535343-1E4D-4BD9-BA61-23C647249616");
+    private static final UUID BLUETOOTH_LE_MICROCHIP_CHAR_W     = UUID.fromString("49535343-8841-43F4-A8D4-ECBE34729BB3");
 
     // https://play.google.com/store/apps/details?id=com.telit.tiosample
     // https://www.telit.com/wp-content/uploads/2017/09/TIO_Implementation_Guide_r6.pdf
@@ -222,8 +223,8 @@ class SerialSocket extends BluetoothGattCallback {
         for (BluetoothGattService gattService : gatt.getServices()) {
             if (gattService.getUuid().equals(BLUETOOTH_LE_CC254X_SERVICE))
                 delegate = new Cc245XDelegate();
-            if (gattService.getUuid().equals(BLUETOOTH_LE_RN4870_SERVICE))
-                delegate = new Rn4870Delegate();
+            if (gattService.getUuid().equals(BLUETOOTH_LE_MICROCHIP_SERVICE))
+                delegate = new MicrochipDelegate();
             if (gattService.getUuid().equals(BLUETOOTH_LE_NRF_SERVICE))
                 delegate = new NrfDelegate();
             if (gattService.getUuid().equals(BLUETOOTH_LE_TIO_SERVICE))
@@ -458,12 +459,14 @@ class SerialSocket extends BluetoothGattCallback {
         }
     }
 
-    private class Rn4870Delegate extends DeviceDelegate {
+    private class MicrochipDelegate extends DeviceDelegate {
         @Override
         boolean connectCharacteristics(BluetoothGattService gattService) {
-            Log.d(TAG, "service rn4870 uart");
-            readCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_RN4870_CHAR_RW);
-            writeCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_RN4870_CHAR_RW);
+            Log.d(TAG, "service microchip uart");
+            readCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_MICROCHIP_CHAR_RW);
+            writeCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_MICROCHIP_CHAR_W);
+            if(writeCharacteristic == null)
+                writeCharacteristic = gattService.getCharacteristic(BLUETOOTH_LE_MICROCHIP_CHAR_RW);
             return true;
         }
     }

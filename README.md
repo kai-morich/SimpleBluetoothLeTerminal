@@ -7,7 +7,7 @@ This Android app provides a line-oriented terminal / console for Bluetooth LE (4
 For an overview on Android BLE communication see 
 [Android Bluetooth LE Overview](https://developer.android.com/guide/topics/connectivity/bluetooth/ble-overview).
 
-In contrast to classic Bluetooth, there is no predifined serial profile for Bluetooth LE, 
+In contrast to classic Bluetooth, there is no predefined serial profile for Bluetooth LE, 
 so each vendor uses GATT services with different service and characteristic UUIDs.
 
 This app includes UUIDs for widely used serial profiles:

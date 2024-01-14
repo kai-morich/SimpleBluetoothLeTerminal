@@ -16,6 +16,8 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.core.content.ContextCompat;
+
 import java.io.IOException;
 import java.security.InvalidParameterException;
 import java.util.ArrayList;
@@ -152,7 +154,7 @@ class SerialSocket extends BluetoothGattCallback {
             throw new IOException("already connected");
         canceled = false;
         this.listener = listener;
-        context.registerReceiver(disconnectBroadcastReceiver, new IntentFilter(Constants.INTENT_ACTION_DISCONNECT));
+        ContextCompat.registerReceiver(context, disconnectBroadcastReceiver, new IntentFilter(Constants.INTENT_ACTION_DISCONNECT), ContextCompat.RECEIVER_NOT_EXPORTED);
         Log.d(TAG, "connect "+device);
         context.registerReceiver(pairingBroadcastReceiver, pairingIntentFilter);
         if (Build.VERSION.SDK_INT < 23) {

@@ -275,8 +275,8 @@ class SerialSocket extends BluetoothGattCallback {
 
     private void connectCharacteristics3(BluetoothGatt gatt) {
         int writeProperties = writeCharacteristic.getProperties();
-        if((writeProperties & (BluetoothGattCharacteristic.PROPERTY_WRITE +     // Microbit,HM10-clone have WRITE
-                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) ==0) { // HM10,TI uart,Telit have only WRITE_NO_RESPONSE
+        if((writeProperties & (BluetoothGattCharacteristic.PROPERTY_WRITE |      // Microbit,HM10-clone have WRITE
+                BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) == 0) { // HM10,TI uart,Telit have only WRITE_NO_RESPONSE
             onSerialConnectError(new IOException("write characteristic not writable"));
             return;
         }
@@ -482,8 +482,10 @@ class SerialSocket extends BluetoothGattCallback {
             if (rw2 != null && rw3 != null) {
                 int rw2prop = rw2.getProperties();
                 int rw3prop = rw3.getProperties();
-                boolean rw2write = (rw2prop & BluetoothGattCharacteristic.PROPERTY_WRITE) != 0;
-                boolean rw3write = (rw3prop & BluetoothGattCharacteristic.PROPERTY_WRITE) != 0;
+                boolean rw2write = (rw2prop & (BluetoothGattCharacteristic.PROPERTY_WRITE |
+                        BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) != 0;
+                boolean rw3write = (rw3prop & (BluetoothGattCharacteristic.PROPERTY_WRITE |
+                        BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)) != 0;
                 Log.d(TAG, "characteristic properties " + rw2prop + "/" + rw3prop);
                 if (rw2write && rw3write) {
                     onSerialConnectError(new IOException("multiple write characteristics (" + rw2prop + "/" + rw3prop + ")"));

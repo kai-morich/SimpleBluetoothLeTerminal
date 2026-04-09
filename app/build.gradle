@@ -4,7 +4,7 @@ android {
     compileSdk 34
     defaultConfig {
         targetSdk 34
-        minSdk 18
+        minSdk 21
         vectorDrawables.useSupportLibrary true
 
         applicationId "de.kai_morich.simple_bluetooth_le_terminal"
@@ -18,13 +18,13 @@ android {
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
     namespace 'de.kai_morich.simple_bluetooth_le_terminal'
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.6.1'
-    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'com.google.android.material:material:1.13.0'
 }

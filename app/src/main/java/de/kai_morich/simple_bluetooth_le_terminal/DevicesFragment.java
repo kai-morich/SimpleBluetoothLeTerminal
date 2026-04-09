@@ -5,6 +5,9 @@ import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanResult;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -42,7 +45,7 @@ public class DevicesFragment extends ListFragment {
     private ScanState scanState = ScanState.NONE;
     private static final long LE_SCAN_PERIOD = 10000; // similar to bluetoothAdapter.startDiscovery
     private final Handler leScanStopHandler = new Handler();
-    private final BluetoothAdapter.LeScanCallback leScanCallback;
+    private final ScanCallback leScanCallback;
     private final Runnable leScanStopCallback;
     private final BroadcastReceiver discoveryBroadcastReceiver;
     private final IntentFilter discoveryIntentFilter;
@@ -55,9 +58,13 @@ public class DevicesFragment extends ListFragment {
     ActivityResultLauncher<String> requestLocationPermissionLauncherForStartScan;
 
     public DevicesFragment() {
-        leScanCallback = (device, rssi, scanRecord) -> {
-            if(device != null && getActivity() != null) {
-                getActivity().runOnUiThread(() -> { updateScan(device); });
+        leScanCallback = new ScanCallback() {
+            @Override
+            public void onScanResult(int callbackType, ScanResult result) {
+                BluetoothDevice device = result.getDevice();
+                if(device != null && getActivity() != null) {
+                    updateScan(device); // already on UI thread
+                }
             }
         };
         discoveryBroadcastReceiver = new BroadcastReceiver() {
@@ -225,7 +232,7 @@ public class DevicesFragment extends ListFragment {
                 locationEnabled |= locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
             } catch(Exception ignored) {}
             if(!locationEnabled)
-                scanState = ScanState.DISCOVERY;
+                nextScanState = ScanState.DISCOVERY;
             // Starting with Android 6.0 a bluetooth scan requires ACCESS_COARSE_LOCATION permission, but that's not all!
             // LESCAN also needs enabled 'location services', whereas DISCOVERY works without.
             // Most users think of GPS as 'location service', but it includes more, as we see here.
@@ -233,6 +240,11 @@ public class DevicesFragment extends ListFragment {
             // we fall back to the older API that scans for bluetooth classic _and_ LE
             // sometimes the older API returns less results or slower
         }
+        BluetoothLeScanner scanner = bluetoothAdapter.getBluetoothLeScanner();
+        if (scanner == null) {
+            nextScanState = ScanState.DISCOVERY;
+        }
+
         scanState = nextScanState;
         listItems.clear();
         listAdapter.notifyDataSetChanged();
@@ -241,8 +253,8 @@ public class DevicesFragment extends ListFragment {
         menu.findItem(R.id.ble_scan_stop).setVisible(true);
         if(scanState == ScanState.LE_SCAN) {
             leScanStopHandler.postDelayed(leScanStopCallback, LE_SCAN_PERIOD);
-            new Thread(() -> bluetoothAdapter.startLeScan(null, leScanCallback), "startLeScan")
-                    .start(); // start async to prevent blocking UI, because startLeScan sometimes take some seconds
+            new Thread(() -> scanner.startScan(leScanCallback), "startLeScan")
+                    .start(); // start async to prevent blocking UI
         } else {
             bluetoothAdapter.startDiscovery();
         }
@@ -272,7 +284,10 @@ public class DevicesFragment extends ListFragment {
         switch(scanState) {
             case LE_SCAN:
                 leScanStopHandler.removeCallbacks(leScanStopCallback);
-                bluetoothAdapter.stopLeScan(leScanCallback);
+                BluetoothLeScanner scanner = bluetoothAdapter.getBluetoothLeScanner();
+                if(scanner != null) {
+                    scanner.stopScan(leScanCallback);
+                }
                 break;
             case DISCOVERY:
                 bluetoothAdapter.cancelDiscovery();

@@ -1,0 +1,9 @@
+[versions]
+appcompat = "1.7.1"
+gradle = "9.1.0"
+material = "1.13.0"
+
+[libraries]
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+gradle = { group = "com.android.tools.build", name = "gradle", version.ref = "gradle" }
+material = { group = "com.google.android.material", name = "material", version.ref = "material" }

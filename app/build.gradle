@@ -21,10 +21,13 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    buildFeatures {
+        buildConfig true
+    }
     namespace 'de.kai_morich.simple_bluetooth_le_terminal'
 }
 
 dependencies {
-    implementation 'androidx.appcompat:appcompat:1.7.1'
-    implementation 'com.google.android.material:material:1.13.0'
+    implementation libs.androidx.appcompat
+    implementation libs.material
 }

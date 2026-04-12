@@ -1,9 +1,9 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdk 34
+    compileSdk 36
     defaultConfig {
-        targetSdk 34
+        targetSdk 36
         minSdk 21
         vectorDrawables.useSupportLibrary true
 
